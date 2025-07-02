@@ -255,74 +255,72 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text("❌ Please send a photo.")
             return
 
-        # Check if photo has a caption (attached text)
-        caption = update.message.caption
-        
-        await update.message.reply_text("📥 Processing your image...")
-
         # Get the largest photo
-        photo_file = await update.message.photo[-1].get_file()
-        photo_bytes = await photo_file.download_as_bytes()
+        photo = update.message.photo[-1]
+        photo_file = await photo.get_file()
+        photo_bytes = await photo_file.download_as_bytearray()
+        
+        # Convert to base64
+        photo_base64 = base64.b64encode(photo_bytes).decode('utf-8')
         
         # Calculate aspect ratio
         aspect_ratio = get_aspect_ratio(photo_bytes)
         
-        # Store photo and aspect ratio
-        context.user_data["photo"] = base64.b64encode(photo_bytes).decode("utf-8")
+        # Store in user data
+        context.user_data["photo"] = photo_base64
         context.user_data["aspect_ratio"] = aspect_ratio
-        
-        if caption and caption.strip():
-            # Photo has caption - use it as editing prompt immediately
-            await update.message.reply_text(
-                f"✅ Image received with caption!\n"
-                f"📐 Detected aspect ratio: {aspect_ratio}\n"
-                f"📝 Using caption as prompt: \"{caption}\"\n\n"
-                f"🎨 Starting edit..."
-            )
-            # Process the edit immediately using the caption
-            await process_image_edit(update, context, caption.strip(), aspect_ratio)
+
+        # Check if there's a caption (Method 1)
+        if update.message.caption:
+            prompt = update.message.caption.strip()
+            await process_image_edit(update, context, prompt, aspect_ratio)
         else:
-            # No caption - ask for text prompt
+            # Method 2 - Ask for editing instruction
             await update.message.reply_text(
-                f"✅ Image received! \n"
+                "📷 **Image received!**\n\n"
                 f"📐 Detected aspect ratio: {aspect_ratio}\n\n"
-                f"💬 Now send me your editing instructions!"
+                "Now send me a text message describing how you want to edit this image.\n\n"
+                "**Examples:**\n"
+                "• Change the car color to red\n"
+                "• Add sunglasses to the person\n"
+                "• Make the sky sunset colored\n"
+                "• Add text 'SALE' to the image"
             )
-            
+
     except Exception as e:
         logger.error(f"Error handling photo: {e}")
-        await update.message.reply_text("❌ Error processing the image. Please try again.")
+        await update.message.reply_text("❌ Error processing your image. Please try again.")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Processes the text prompt and sends the image to BFL.ai for editing."""
+    """Handle text messages (editing instructions)."""
     if "photo" not in context.user_data:
         await update.message.reply_text(
-            "📷 Please send a photo first before sending editing instructions.\n"
-            "Use /start to see how to use the bot."
+            "Please send an image first! Use /start to see instructions."
         )
         return
-
-    prompt = update.message.text
+    
+    prompt = update.message.text.strip()
     aspect_ratio = context.user_data.get("aspect_ratio", "1:1")
     
     await process_image_edit(update, context, prompt, aspect_ratio)
 
 def main() -> None:
     """Start the bot."""
+    logger.info("Starting bot...")
+    
     # Create the Application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
-    # Register handlers
+    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("clear", clear_command))
     application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    # Run the bot
-    logger.info("Starting Telegram BFL.ai Image Editor Bot...")
+    # Start the bot
+    logger.info("Bot is starting...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
-
