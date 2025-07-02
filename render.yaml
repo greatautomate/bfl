@@ -1,0 +1,15 @@
+services:
+  - type: worker
+    name: telegram-bfl-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: BFL_API_KEY
+        sync: false
+    scaling:
+      minInstances: 1
+      maxInstances: 1
+
